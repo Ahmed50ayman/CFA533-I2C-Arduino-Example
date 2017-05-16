@@ -1,0 +1,9 @@
+uint8_t
+    keys_down;
+  uint8_t
+    key_presses;
+  uint8_t
+    key_releases;
+  . . .
+  //Ask the module what is happening with the keys
+  cfPacket->getKeys(&keys_down,&key_presses,&key_releases);
