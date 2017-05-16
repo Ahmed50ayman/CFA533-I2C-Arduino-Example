@@ -40,7 +40,10 @@ For more information, please refer to <http://unlicense.org/>
 #include <stdarg.h>
 #include <avr/pgmspace.h>
 #include <util/crc16.h>
+
+#define buildSerial 0
 //============================================================================
+#if (buildSerial == 1)
 // ref http://playground.arduino.cc/Main/Printf
 void SerPrintFF(const __FlashStringHelper *fmt, ... )
   {
@@ -75,57 +78,7 @@ int freeRam(void)
     v;
   return((int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval)); 
   }
-//============================================================================
-// Waits until a switch is closed before booting (debug)
-#define led_pin 3
-#define switch_pin 2
-//----------------------------------------------------------------------------
-void BootStall(void)
-  {
-  int
-    count;
-  //wait for switch to be pressed
-  count=0;
-  while(count<3)
-    {
-    if(digitalRead(switch_pin))
-      {
-      //released
-      count=0;
-      digitalWrite(led_pin, HIGH);
-      delay(50);
-      digitalWrite(led_pin, LOW);
-      }
-    else
-      {
-      //pressed
-      count++;
-      digitalWrite(led_pin, HIGH);
-      }
-    delay(50);
-    }
-
-  //wait for switch to be released
-  count=0;
-  while(count<3)
-    {
-    if(digitalRead(switch_pin))
-      {
-      //pressed
-      count++;
-      digitalWrite(led_pin, HIGH);
-      }
-    else
-      {
-      //released
-      count=0;
-      digitalWrite(led_pin, HIGH);
-      delay(50);
-      digitalWrite(led_pin, LOW);
-      }
-    delay(50);
-    }
-  }
+#endif
 //============================================================================
 typedef struct
   {
@@ -145,7 +98,9 @@ class CrystalfontzI2CPacketLCD
               CFPacket_t *packet_sent,
               CFPacket_t *packet_received,
               uint8_t print_errors);
+#if (buildSerial == 1)
     uint8_t dumpPacket(CFPacket_t *packet_to_send);
+#endif
     uint8_t Search_I2C_Adresses(void);
     void Set_I2C_Adress(uint8_t address);
     void writeText(uint8_t x, uint8_t y, char *text, uint8_t length);
@@ -271,30 +226,36 @@ uint8_t CrystalfontzI2CPacketLCD::sendPacket_getReply(
   //Validate the command
   if(35 < packet_to_send->command)
     {
+#if (buildSerial == 1)
     if(print_errors)
       {
       SerPrintFF(F("sendPacket_getReply: packet_to_send->command out of range %d requested, max is 35\n"),
                  packet_to_send->command);
       }
+#endif
     return(1);
     }
   if(0xFF == receive_packet_length[packet_to_send->command])
     {
+#if (buildSerial == 1)
     if(print_errors)
       {
       SerPrintFF(F("sendPacket_getReply: packet_to_send->command number %d is invalid/reserved\n"),
                  packet_to_send->command);
       }
+#endif
     return(2);
     }
   //Validate the data length
   if(18 < packet_to_send->length)
     {
+#if (buildSerial == 1)
     if(print_errors)
       {
       SerPrintFF(F("sendPacket_getReply: packet_to_send->length out of range %d requested, max is 18\n"),
                  packet_to_send->length);
       }
+#endif
     return(3);
     }
   //Start the I2C transaction    
@@ -329,6 +290,7 @@ uint8_t CrystalfontzI2CPacketLCD::sendPacket_getReply(
   //Now it is safe to read the response packet back from the CFA533.
   bytes_received=Wire.requestFrom(i2c_address,EXPECTED_BYTES);
 
+#if (buildSerial == 1)
   //If the bytes received does not agree, throw a warning.
   if(bytes_received != EXPECTED_BYTES)
     {
@@ -339,12 +301,14 @@ uint8_t CrystalfontzI2CPacketLCD::sendPacket_getReply(
                  bytes_received);
       }
     }
+#endif
 
   if(1<=bytes_received)
     {
     //Get the command byte of the respose
     packet_received->command=Wire.read();
 
+#if (buildSerial == 1) 
     //Verify the low 6 bits of the Rx vs Tx command. They should match.
     if((packet_received->command & 0x3F ) != (packet_to_send->command & 0x3F ))
       {
@@ -355,23 +319,27 @@ uint8_t CrystalfontzI2CPacketLCD::sendPacket_getReply(
                   packet_to_send->command&0x3F, packet_to_send->command&0x3F);
         }
       }
-    //Verify the top 2 bits of the Rx command. 
+    //Verify the top 2 bits of the Rx command.
     if((packet_received->command & 0xC0 ) != (0x40))
       {
       if(print_errors)
         {
         SerPrintFF(F("Received unexpected response type of 0x%02X to command %3d (0x%02X). Expect 0x40.\n"),
                   packet_received->command & 0xC0,
-                  packet_to_send->command&0x3F,   packet_to_send->command&0x3F);
+                  packet_to_send->command&0x3F,
+                  packet_to_send->command&0x3F);
         }
       }
+#endif
     }
   else
     {
+#if (buildSerial == 1)
     if(print_errors)
       {
       SerPrintFF(F("sendPacket_getReply: No command byte returned.\n"));
       }
+#endif
     return(4);
     }
 
@@ -385,21 +353,25 @@ uint8_t CrystalfontzI2CPacketLCD::sendPacket_getReply(
     if(((18 + 2) < packet_received->length)||
        (Wire.available() < packet_received->length))
       {
+#if (buildSerial == 1)
       if(print_errors)
         {
         SerPrintFF(F("Invalid length of %d in response to command %d. Truncating to %d.\n"),
                    packet_received->length,packet_to_send->command,Wire.available());
         }
+#endif
       //Attempt to gracefully continue: Override the length
       packet_received->length = Wire.available();
       }
     }
   else
     {
+#if (buildSerial == 1)
     if(print_errors)
       {
       SerPrintFF(F("sendPacket_getReply: No length byte returned.\n"));
       }
+#endif
     return(5);
     }
     
@@ -428,6 +400,7 @@ uint8_t CrystalfontzI2CPacketLCD::sendPacket_getReply(
     
   if((crc_low != LOW_CRC) || (crc_high != HIGH_CRC))
     {
+#if (buildSerial == 1)
     if(print_errors)
       {
       SerPrintFF(F("calculated CRC hi:low (0x%02X:%02X) %3d : %3d\n"),
@@ -437,6 +410,7 @@ uint8_t CrystalfontzI2CPacketLCD::sendPacket_getReply(
                  crc_high,crc_low,
                  crc_high,crc_low);
       }
+#endif
     return(6);
     }
   //All good.
@@ -493,6 +467,7 @@ uint8_t CrystalfontzI2CPacketLCD::sendPacket_getReply(
     cmd_Str_28,cmd_Str_29,cmd_Str_30,cmd_Str_31,cmd_Str_32,cmd_Str_33,cmd_Str_34,
     cmd_Str_35};
 
+#if (buildSerial == 1)
 uint8_t CrystalfontzI2CPacketLCD::dumpPacket(CFPacket_t *packet)
   {
   SerPrintFF(F("Decode %s%s packet: %2d ( 0x%02x ): \""),
@@ -538,6 +513,7 @@ uint8_t CrystalfontzI2CPacketLCD::dumpPacket(CFPacket_t *packet)
              packet->crc,
              packet->length);
   }
+#endif
 //----------------------------------------------------------------------------
 uint8_t CrystalfontzI2CPacketLCD::Search_I2C_Adresses(void)
   {
@@ -571,8 +547,10 @@ uint8_t CrystalfontzI2CPacketLCD::Search_I2C_Adresses(void)
         {
         device_found_at_address=i2c_address;
         }
+#if (buildSerial == 1)
       SerPrintFF(F("Device found at addreess %3d\n"),i2c_address);
       dumpPacket(&address_response);
+#endif
       }
     }
     
@@ -1021,10 +999,10 @@ void Keys_and_Bar_Graph_Demo(void)
 //============================================================================
 void setup()
   {
-  pinMode(led_pin, OUTPUT);
-  pinMode(switch_pin, INPUT_PULLUP);
+#if (buildSerial == 1)
   Serial.begin(115200);  // start serial for output
   SerPrintFF(F("Free Memory: %d\n"),freeRam);
+#endif
 
   Wire.begin(); // join i2c bus (address optional for master)
   //If you know the address:
@@ -1036,22 +1014,31 @@ void setup()
 //============================================================================
 void loop()
   {
+#if (buildSerial == 1)
   SerPrintFF(F("============================================================================\n"));
   //SerPrintFF(F("Waiting for permission to boot . . . "));
-  //BootStall();
   SerPrintFF(F("booting now.\n"));
 //  SerPrintFF(F("1"));
+#endif
   
   while(1)
     {
+#if (buildSerial == 1)
 //  SerPrintFF(F("1"));
+#endif
     Keys_and_Bar_Graph_Demo();
+#if (buildSerial == 1)
 //  SerPrintFF(F("2"));
+#endif
     Text_Scroll_Demo();
+#if (buildSerial == 1)
 //  SerPrintFF(F("3"));
+#endif
     //Key_Poll_Demo_Forever();
     Bar_Graph_Demo();
+#if (buildSerial == 1)
 //  SerPrintFF(F("4\n"));
+#endif
     }
   }
 //============================================================================
